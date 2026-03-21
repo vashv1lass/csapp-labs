@@ -233,10 +233,10 @@ int conditional(int x, int y, int z) {
  */
 int isLessOrEqual(int x, int y) {
   int sign_mask = 1 << 31;
-  int      tmin = sign_mask;
-  int      negx = ~x + 1;
-  int    ydiffx = y + negx;
-
+  
+  int   negx = ~x + 1;
+  int ydiffx = y + negx;
+  
   return !(ydiffx & sign_mask);
 }
 //4
@@ -249,7 +249,13 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+  int  spread1 = (x >> 1) | x;
+  int  spread2 = (spread1 >> 2) | spread1;
+  int  spread4 = (spread2 >> 4) | spread2;
+  int  spread8 = (spread4 >> 8) | spread4;
+  int spread16 = (spread8 >> 16) | spread8;
+
+  return ~spread16 & 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -264,7 +270,49 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+	int    negx_mask = (x & (1 << 31)) >> 31;
+	int         absx = (negx_mask & (~x + 1)) | (~negx_mask & x);
+	int    save_absx = absx;
+	int   zerox_mask = (!(x ^ 0) << 31) >> 31; // the 'x=0' edge case
+	
+	int        first1 = 0;
+	int   curshiftval = 0;
+	int curshift_mask = 0;
+
+  int incr_mask = 0;
+  int incrval = 0;
+	
+	curshift_mask = (!!(absx >> 16) << 31) >> 31;
+	curshiftval = (curshift_mask & 16) | (~curshift_mask & 0);
+	absx >>= curshiftval;
+	first1 |= curshiftval;
+	
+	curshift_mask = (!!(absx >> 8) << 31) >> 31;
+	curshiftval = (curshift_mask & 8) | (~curshift_mask & 0);
+	absx >>= curshiftval;
+	first1 |= curshiftval;
+	
+	curshift_mask = (!!(absx >> 4) << 31) >> 31;
+	curshiftval = (curshift_mask & 4) | (~curshift_mask & 0);
+	absx >>= curshiftval;
+	first1 |= curshiftval;
+	
+	curshift_mask = (!!(absx >> 2) << 31) >> 31;
+	curshiftval = (curshift_mask & 2) | (~curshift_mask & 0);
+	absx >>= curshiftval;
+	first1 |= curshiftval;
+	
+	curshift_mask = (!!(absx >> 1) << 31) >> 31;
+	curshiftval = (curshift_mask & 1) | (~curshift_mask & 0);
+	absx >>= curshiftval;
+	first1 |= curshiftval;
+	
+	incr_mask = (!(save_absx ^ (1 << first1)) << 31) >> 31;
+	incr_mask = (negx_mask & incr_mask) | (~negx_mask & 0);
+	incr_mask = (zerox_mask & ~0) | (~zerox_mask & incr_mask);
+	
+	incrval = !incr_mask;
+	return first1 + 1 + incrval;
 }
 //float
 /* 
