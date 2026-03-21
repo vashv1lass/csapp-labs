@@ -166,8 +166,9 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  int ones = ~0;
+  int    ones = ~0;
   int xmul2p1 = x + x + 1;
+
   return !(ones ^ xmul2p1) & !!(x ^ ones);
 }
 /* 
@@ -179,7 +180,11 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+  int allodd_mask = (0xAA << 24) | (0xAA << 16) | (0xAA << 8) | 0xAA;
+  int     xallodd = allodd_mask & x;
+  int  negxallodd = ~xallodd + 1;
+
+  return !(allodd_mask + negxallodd);
 }
 /* 
  * negate - return -x 
@@ -189,7 +194,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return ~x + 1;
 }
 //3
 /* 
@@ -202,7 +207,10 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  int nolonibble_fits = !((x >> 4) ^ 0x3);
+  int   lonibble_fits = !(x & 0x8) | !((x & 0xF) ^ 0x8) | !((x & 0xF) ^ 0x9);
+
+  return nolonibble_fits & lonibble_fits;
 }
 /* 
  * conditional - same as x ? y : z 
@@ -212,7 +220,9 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  int muxx = (!!x) << 31 >> 31;
+
+  return (muxx & y) | (~muxx & z);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -222,7 +232,12 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  int sign_mask = 1 << 31;
+  int      tmin = sign_mask;
+  int      negx = ~x + 1;
+  int    ydiffx = y + negx;
+
+  return !(ydiffx & sign_mask);
 }
 //4
 /* 
