@@ -232,12 +232,20 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  int sign_mask = 1 << 31;
-  
+  int tmin = 1 << 31;
+
   int   negx = ~x + 1;
-  int ydiffx = y + negx;
-  
-  return !(ydiffx & sign_mask);
+  int ydiffx = negx + y;
+
+  int eqsign_mask = (negx ^ y) >> 31;
+  int   yneg_mask = y >> 31;
+
+  int xtmin_mask = (!(x ^ tmin) << 31) >> 31;
+
+  int result = (eqsign_mask & !(ydiffx >> 31)) | (~eqsign_mask & !(yneg_mask));
+  result = (xtmin_mask & 1) | (~xtmin_mask & result);
+
+  return result;
 }
 //4
 /* 
@@ -327,7 +335,55 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+#if 0 // Replace 0 to 1 to compile a CHALLENGE
+  // Integer coding rules restriction CHALLENGE (Max ops: 40):
+  unsigned ufsign_mask =  uf & 0x80000000;
+  unsigned       ufexp = (uf & 0x7F800000) >> 23;
+  unsigned      uffrac =  uf & 0x007FFFFF;
+
+  int        ufspec_mask = !(ufexp ^ 0xFF) << 31;
+  int      ufdenorm_mask = !ufexp << 31;
+  int ufpreoverflow_mask = !(ufexp ^ 0xFE) << 31;
+
+  int uffrac_res = uffrac;
+
+  ufspec_mask >>= 31;
+  ufdenorm_mask >>= 31;
+  ufpreoverflow_mask >>= 31;
+
+  uffrac_res = (ufdenorm_mask & (uffrac_res << 1)) | (~ufdenorm_mask & uffrac_res);
+  uffrac_res = (ufpreoverflow_mask & 0) | (~ufpreoverflow_mask & uffrac_res);
+  uffrac_res = (ufspec_mask & uffrac) | (~ufspec_mask & uffrac_res);
+
+  ufexp = (ufdenorm_mask & ufexp) | (~ufdenorm_mask & (ufexp + 1));
+  ufexp = (ufspec_mask & 0xFF) | (~ufspec_mask & ufexp);
+
+  return ufsign_mask | ((ufexp << 23) + uffrac_res);
+#else
+  unsigned ufsign_mask =  uf & 0x80000000;
+	unsigned       ufexp = (uf & 0x7F800000) >> 23;
+	unsigned      uffrac =  uf & 0x007FFFFF;
+	
+	if (ufexp == 0xFF) { // case 1: the number is special
+		return uf;
+	}
+	
+	if (ufexp == 0x00) { // case 2: the number is denormalized
+		uffrac <<= 1;
+		
+		return ufsign_mask | uffrac;
+	}
+	
+	// case 3: the number is normalized
+	++ufexp;
+	
+	if (ufexp == 0xFF) { // case 3.1: the number has overflowed
+		return ufsign_mask | 0x7F800000;
+	}
+	
+	// case 3.2: a usual case
+	return ufsign_mask | (ufexp << 23) | uffrac;
+#endif // Integer coding rules restriction CHALLENGE
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
