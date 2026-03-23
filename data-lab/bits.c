@@ -278,18 +278,18 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-	int    negx_mask = (x & (1 << 31)) >> 31;
-	int         absx = (negx_mask & (~x + 1)) | (~negx_mask & x);
-	int    save_absx = absx;
-	int   zerox_mask = (!(x ^ 0) << 31) >> 31; // the 'x=0' edge case
+	int  negx_mask = (x & (1 << 31)) >> 31;
+	int       absx = (negx_mask & (~x + 1)) | (~negx_mask & x);
+	int  save_absx = absx;
+	int zerox_mask = (!(x ^ 0) << 31) >> 31; // the 'x=0' edge case
 	
 	int        first1 = 0;
 	int   curshiftval = 0;
 	int curshift_mask = 0;
 
   int incr_mask = 0;
-  int incrval = 0;
-	
+  int   incrval = 0;
+
 	curshift_mask = (!!(absx >> 16) << 31) >> 31;
 	curshiftval = (curshift_mask & 16) | (~curshift_mask & 0);
 	absx >>= curshiftval;
@@ -320,6 +320,7 @@ int howManyBits(int x) {
 	incr_mask = (zerox_mask & ~0) | (~zerox_mask & incr_mask);
 	
 	incrval = !incr_mask;
+
 	return first1 + 1 + incrval;
 }
 //float
@@ -336,7 +337,8 @@ int howManyBits(int x) {
  */
 unsigned floatScale2(unsigned uf) {
 #if 0 // Replace 0 to 1 to compile a CHALLENGE
-  // Integer coding rules restriction CHALLENGE (Max ops: 40):
+  // Integer coding rules restriction CHALLENGE (Max ops: 40) (no constant limits):
+
   unsigned ufsign_mask =  uf & 0x80000000;
   unsigned       ufexp = (uf & 0x7F800000) >> 23;
   unsigned      uffrac =  uf & 0x007FFFFF;
@@ -398,7 +400,56 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+#if 0 // Replace 0 to 1 to compile a CHALLENGE
+  // Integer coding rules restriction CHALLENGE (Max ops: 40) (does not work correctly)
+
+  int      ufsign_mask = (uf & 0x80000000) >> 31;
+  unsigned       ufexp = (uf & 0x7F800000) >> 23;
+  unsigned      uffrac =  uf & 0x007FFFFF;
+
+  unsigned          ufnormsignificand = uffrac | 0x00800000;
+  int      ufnormsignificand_shiftval = 150 - ufexp;
+  int      ufnormsignificandsign_mask = ufnormsignificand_shiftval >> 31;
+
+  unsigned negufexp = ~ufexp + 1;
+  int   uf2big = !((127 + negufexp) & 0x80000000) << 31 >> 31;
+  int uf2small = ((157 + negufexp) & 0x80000000) >> 31;
+
+  ufnormsignificand = (ufnormsignificandsign_mask & (ufnormsignificand << (~ufnormsignificand_shiftval + 1))) | (~ufnormsignificandsign_mask & (ufnormsignificand >> ufnormsignificand_shiftval));
+  ufnormsignificand = (ufsign_mask & (~ufnormsignificand + 1)) | (~ufsign_mask & ufnormsignificand);
+  ufnormsignificand = (uf2big & 0x80000000) | (~uf2big & ufnormsignificand);
+  ufnormsignificand = (uf2small & 0) | (~uf2small & ufnormsignificand);
+
+  return ufnormsignificand;
+#else
+	unsigned ufsign_mask =  uf & 0x80000000;
+	unsigned       ufexp = (uf & 0x7F800000) >> 23;
+	unsigned      uffrac =  uf & 0x007FFFFF;
+	
+	unsigned          ufnormsignificand = uffrac | 0x00800000;
+	int      ufnormsignificand_shiftval = 150 - ufexp;
+	
+	if (ufexp < 127) { // case 1: the number is too small
+		return 0;
+	}
+	
+	if (ufexp >= 158) { // case 2: the number is too big, special, or 0xCF000000
+		return 0x80000000;
+	}
+	
+	// case 3: the number is normalized
+	if (ufnormsignificand_shiftval > 0) {
+		ufnormsignificand >>= ufnormsignificand_shiftval;
+	} else {
+		ufnormsignificand <<= ufnormsignificand_shiftval;
+	}
+	
+	if (ufsign_mask) {
+		ufnormsignificand = -ufnormsignificand;
+	}
+	
+	return ufnormsignificand;
+#endif
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -414,5 +465,5 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+  return 2;
 }
