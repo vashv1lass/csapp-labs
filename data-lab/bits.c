@@ -281,7 +281,7 @@ int howManyBits(int x) {
 	int  negx_mask = (x & (1 << 31)) >> 31;
 	int       absx = (negx_mask & (~x + 1)) | (~negx_mask & x);
 	int  save_absx = absx;
-	int zerox_mask = (!(x ^ 0) << 31) >> 31; // the 'x=0' edge case
+	int zerox_mask = (!(x ^ 0) << 31) >> 31;
 	
 	int        first1 = 0;
 	int   curshiftval = 0;
@@ -337,11 +337,11 @@ int howManyBits(int x) {
  */
 unsigned floatScale2(unsigned uf) {
 #if 0 // Replace 0 to 1 to compile a CHALLENGE
-  // Integer coding rules restriction CHALLENGE (Max ops: 40) (no constant limits):
+  // Integer coding rules restriction CHALLENGE:
 
-  unsigned ufsign_mask =  uf & 0x80000000;
-  unsigned       ufexp = (uf & 0x7F800000) >> 23;
-  unsigned      uffrac =  uf & 0x007FFFFF;
+  unsigned ufsign_mask =  uf & (0x01 << 31);
+  unsigned       ufexp = (uf & (0xFF << 23)) >> 23;
+  unsigned      uffrac =  uf & ((0x7F << 16) | (0xFF << 8) | 0xFF);
 
   int        ufspec_mask = !(ufexp ^ 0xFF) << 31;
   int      ufdenorm_mask = !ufexp << 31;
@@ -362,6 +362,8 @@ unsigned floatScale2(unsigned uf) {
 
   return ufsign_mask | ((ufexp << 23) + uffrac_res);
 #else
+  // Normal problem statement (floating point coding rules restrictions)
+
   unsigned ufsign_mask =  uf & 0x80000000;
 	unsigned       ufexp = (uf & 0x7F800000) >> 23;
 	unsigned      uffrac =  uf & 0x007FFFFF;
@@ -401,27 +403,38 @@ unsigned floatScale2(unsigned uf) {
  */
 int floatFloat2Int(unsigned uf) {
 #if 0 // Replace 0 to 1 to compile a CHALLENGE
-  // Integer coding rules restriction CHALLENGE (Max ops: 40) (does not work correctly)
+	// Integer coding rules restriction CHALLENGE
+	
+  unsigned sign_mask = 1 << 31;
 
-  int      ufsign_mask = (uf & 0x80000000) >> 31;
-  unsigned       ufexp = (uf & 0x7F800000) >> 23;
-  unsigned      uffrac =  uf & 0x007FFFFF;
-
-  unsigned          ufnormsignificand = uffrac | 0x00800000;
-  int      ufnormsignificand_shiftval = 150 - ufexp;
-  int      ufnormsignificandsign_mask = ufnormsignificand_shiftval >> 31;
-
-  unsigned negufexp = ~ufexp + 1;
-  int   uf2big = !((127 + negufexp) & 0x80000000) << 31 >> 31;
-  int uf2small = ((157 + negufexp) & 0x80000000) >> 31;
-
-  ufnormsignificand = (ufnormsignificandsign_mask & (ufnormsignificand << (~ufnormsignificand_shiftval + 1))) | (~ufnormsignificandsign_mask & (ufnormsignificand >> ufnormsignificand_shiftval));
-  ufnormsignificand = (ufsign_mask & (~ufnormsignificand + 1)) | (~ufsign_mask & ufnormsignificand);
-  ufnormsignificand = (uf2big & 0x80000000) | (~uf2big & ufnormsignificand);
-  ufnormsignificand = (uf2small & 0) | (~uf2small & ufnormsignificand);
-
-  return ufnormsignificand;
+	int      ufsign_mask =  uf & sign_mask;
+	unsigned       ufexp = (uf & (0xFF << 23)) >> 23;
+	unsigned      uffrac =  uf & ((0x7F << 16) | (0xFF << 8) | 0xFF);
+	
+	unsigned                   negufexp = ~ufexp + 1;
+	unsigned          ufnormsignificand = uffrac | (1 << 23);
+	int      ufnormsignificand_shiftval = 150 + negufexp;
+	int      ufnormsignificandsign_mask = ufnormsignificand_shiftval >> 31;
+	
+	int   uf2big = (157 + negufexp) & sign_mask;
+	int uf2small = !((126 + negufexp) & sign_mask) << 31;
+	
+	ufsign_mask >>= 31;
+	
+	uf2big   >>= 31;
+	uf2small >>= 31;
+	
+	ufnormsignificand_shiftval &= 0x1F;
+	
+	ufnormsignificand = (ufnormsignificandsign_mask & (ufnormsignificand << (~ufnormsignificand_shiftval + 1))) | (~ufnormsignificandsign_mask & (ufnormsignificand >> ufnormsignificand_shiftval));
+	ufnormsignificand = (ufsign_mask & (~ufnormsignificand + 1)) | (~ufsign_mask & ufnormsignificand);
+	ufnormsignificand = (uf2big & sign_mask) | (~uf2big & ufnormsignificand);
+	ufnormsignificand = (uf2small & 0) | (~uf2small & ufnormsignificand);
+	
+	return ufnormsignificand;
 #else
+  // Normal problem statement (floating point coding rules restrictions)
+
 	unsigned ufsign_mask =  uf & 0x80000000;
 	unsigned       ufexp = (uf & 0x7F800000) >> 23;
 	unsigned      uffrac =  uf & 0x007FFFFF;
@@ -449,7 +462,7 @@ int floatFloat2Int(unsigned uf) {
 	}
 	
 	return ufnormsignificand;
-#endif
+#endif // Integer coding rules restriction CHALLENGE
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -465,5 +478,41 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-  return 2;
+#if 0 // Replace 0 to 1 to compile a CHALLENGE
+  // Integer coding rules restriction CHALLENGE
+
+  unsigned sign_mask = 1 << 31;
+
+  int x2small_mask = (x + 149) & sign_mask;
+  int xdenorm_mask = (x + 126) & sign_mask;
+  int   xnorm_mask = !((128 + ~x) & sign_mask) << 31;
+
+  unsigned result = 0;
+
+  x2small_mask >>= 31;
+  xdenorm_mask >>= 31;
+  xnorm_mask   >>= 31;
+
+  result = (xnorm_mask & ((x + 127) << 23)) | (~xnorm_mask & (0xFF << 23));
+  result = (xdenorm_mask & (1 << (x + 149))) | (~xdenorm_mask & result);
+  result = (x2small_mask & 0) | (~x2small_mask & result);
+  
+  return result;
+#else
+  // Normal problem statement (floating point coding rules restrictions)
+
+  if (x < -149) { // case 1: the number is too small
+    return 0;
+  }
+
+  if (x <= -127) { // case 2: the number is denormalized
+    return 1 << (x + 149);
+  }
+
+  if (x <= 127) { // case 3: the number is normalized
+    return ((x + 127) << 23);
+  }
+
+  return (0xFF << 23);
+#endif // Integer coding rules restriction CHALLENGE
 }
