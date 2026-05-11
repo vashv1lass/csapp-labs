@@ -131,3 +131,118 @@ So, the answer for phase 2 is
 ```
 1 2 4 8 16 32
 ```
+
+### PHASE 3
+
+An algorithm that you need to perform is almost identical to the phase 2.
+
+```bash
+(lldb) disassemble # see the `phase_3` func address
+(lldb) expr $rsp = $rsp - 8 # allocate the space for the return address.
+(lldb) memory write -s 8 $rsp <address of the next instruction after `phase_3` call>
+(lldb) thread jump --address <`phase_3` func address>
+(lldb) disassemble # see the assembly code so as not to get lost
+```
+
+You see that there are 2 local variables stored on the stack. Also you see that `sscanf` function must return a value greater than 1, so the bomb won't explode.
+
+```assembly
+callq  <`__isoc99_scanf` func address>
+cmpl   $0x1, %eax
+jg     <`phase_3` func address + 39>
+callq  <`explode_bomb` func address>
+```
+
+Then, you see that the value stored in the first variable is compared with 7, and if it is greater, then bomb explodes, but if it is less or equal, some indirect jump is performed.
+
+```assembly
+cmpl   $0x7, 0x8(%rsp)
+ja     <`phase_3` func address + 106> ; `explode_bomb` function call is here
+movl   0x8(%rsp), %eax
+jmpq   *<some_address>(,%rax,8)
+```
+
+Let the value of this variable be equal to 7. Lets read the value stored in the address of <some_address>(,%rax,8).
+
+```bash
+(lldb) memory read -f x -s 8 `0x0 + $rax * 0x8 + <some_address>`
+```
+
+We see the lldb answer like:
+
+```
+<some_address+56>:  <`phase_3` func address + 99>  0x737265697564616d
+<some_address+72>:  0x6c796276746f666e             0x7420756f79206f53
+<some_address+88>:  0x756f79206b6e6968             0x6f7473206e616320
+<some_address+104>: 0x6f62206568742070             0x206874697720626d
+```
+
+Of all these values, we are interested in the first one -- it's the address of some instruction in `phase_3` function. Let's see it.
+
+```bash
+(lldb) disassembly
+```
+
+```assembly
+movl   $0x147, %eax
+jmp    <`phase_3 func address` + 123>
+```
+
+If we read the memory at the address of 0x402470, via
+```bash
+(lldb) memory read -f x -s 8 `0x402470`
+```
+command, LLDB answers:
+```
+0x00402470: <`stage_3` func address + 57> <`stage_3` func address + 118>
+0x00402480: <`stage_3` func address + 64> <`stage_3` func address + 71>
+0x00402490: <`stage_3` func address + 78> <`stage_3` func address + 85>
+0x004024a0: <`stage_3` func address + 92> <`stage_3` func address + 99>
+```
+
+Looks like a jump table for switch-case... And it is! If we reverse-engineer this switch-case statement, we'll get something like:
+```c
+if (a > 7) {
+    explode_bomb();
+}
+
+switch (a) { // a = 0x8(%rsp)
+case 0:
+    result = 207; // movl   $0xcf, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+case 2:
+    result = 707; // movl   $0x137, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+case 3:
+    result = 256; // movl   $0x100, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+case 4:
+    result = 389; // movl   $0x185, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+case 5:
+    result = 206; // movl   $0xce, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+case 6:
+    result = 682; // movl   $0x2aa, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+case 7:
+    result = 327; // movl   $0x147, %eax
+    break;        // jmp    <`phase_3` func address + 123>
+default:
+    result = 311; // movl   $0x137, %eax
+}
+```
+
+The `result` is stored in `%eax`. Then it is compared with the value stored in the second variable. If it is equal, stage 3 is defused, if not -- the bomb explodes.
+
+So, there are multiple correct answers. They are:
+```
+(1) 0 207
+(2) 2 707
+(3) 3 256
+(4) 4 389
+(5) 5 206
+(6) 6 682
+(7) 7 327
+(8) 1 311
+```
