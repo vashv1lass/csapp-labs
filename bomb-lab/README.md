@@ -246,3 +246,123 @@ So, there are multiple correct answers. They are:
 (7) 7 327
 (8) 1 311
 ```
+
+### PHASE 4
+
+```bash
+(lldb) disassemble # see the `phase_4` func address
+(lldb) disassemble --address <`phase_4` func address>
+```
+
+You see that the function is not very complicated, but it calls some `func4` fuction. Let's see, what's going on there:
+
+```bash
+(lldb) disassemble --address <`func4` func address>
+```
+
+You see, that the function is quite straightforward, except the fact that it is recursive. Let's translate the assembly code into C code to understand more:
+
+```c
+// straightforward assembly code translation for `func4`
+int func4(int a, int b, int c) {
+    int result = c;
+    result -= b;
+    unsigned int temp = result;
+    temp >>= 31;
+    result += temp;
+    result >>= 1;
+    int d = result + b;
+    if (d > a) {
+        c = d - 1;
+        result = func4(a, b, c);
+        result *= 2;
+    } else {
+        result = 0;
+        if (d < a) {
+            b = d + 1;
+            result = func4(a, b, c);
+            result = 2 * result + 1;
+        }
+    }
+    return result;
+}
+```
+
+Let's try to understand this code via trying to determine the purpose of the variables and giving them meaningful names. Also we can try to reduce the code.
+
+```c
+int func4(int a, int b, int c) {
+    // looks like the distance to the average value between c and b (?)
+    // nevermind. dont care what that means.
+    int avg_distance;
+    if (c > b) {
+        avg_distance = c - b;
+    } else {
+        avg_distance = c - b + 1;
+    }
+    avg_distance /= 2;
+
+    int d = avg_distance + b;
+    if (d > a) {
+        return func4(a, b, d - 1) * 2;
+    }
+
+    int result = 0;
+    if (d < a) {
+        return 2 * func4(a, d + 1, c) + 1;
+    }
+
+    return 0;
+}
+```
+
+Let's have a look to `phase_4` function. We see, that `func4` is called like `func4(a, 0, 14)`, where `a` is less than 14 and not negative (it uses the unsigned jump instruction `jbe`, so the negative values will be taken by the program as very large positives) or the bomb explodes. Also the value returned from this function must be 0, the bomb will explode otherwise. So, we must not allow the condition `d < a` be true. If this condition is true, this line of the code
+```c
+return 2 * func4(a, d + 1, c) + 1;
+```
+will be executed. It is not allowed, because this expression will make the return value not equal to 0, so the bomb will explode. Let's find out the correct numbers using brute force method. I wrote a simple brute force program in file `phase4_brute_force.c`
+
+```bash
+gcc -o phase4_brute_force phase4_brute_force.c
+./phase4_brute_force
+```
+
+The output is:
+```
+a=2 is a bad case.
+a=4 is a bad case.
+a=5 is a bad case.
+a=6 is a bad case.
+a=8 is a bad case.
+a=9 is a bad case.
+a=10 is a bad case.
+a=11 is a bad case.
+a=12 is a bad case.
+a=13 is a bad case.
+a=14 is a bad case.
+```
+
+So, the "good" cases are:
+```
+a=0
+a=1
+a=3
+a=7
+```
+
+Variable `a` is located in the `8(%rsp)` position. The second variable (located in `0xc(%rsp)`) must have the value of 0. It's pretty simple to understand if we see the assembly code of `phase_4` one more time.
+```bash
+(lldb) disassemble
+```
+```assembly
+cmpl   $0x0, 0xc(%rsp)
+je     <`phase_4 epilogue address`>
+callq  <`explode_bomb` address>
+```
+So, there are also multiple correct answers for phase 4. They are:
+```
+(1) 0 0
+(2) 1 0
+(3) 3 0
+(4) 7 0
+```
