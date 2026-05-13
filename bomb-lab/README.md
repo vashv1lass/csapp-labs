@@ -366,3 +366,101 @@ So, there are also multiple correct answers for phase 4. They are:
 (3) 3 0
 (4) 7 0
 ```
+
+### PHASE 5
+
+```bash
+(lldb) disassemble # see the `phase_5` func address
+(lldb) disassemble --address <`phase_5` func address`>
+```
+
+In the assembly code of `phase_5` function, we see that it calls functions like `strings_not_equal` and `string_length`, so this phase is about strings.
+
+We also see, that the function `phase_5` uses value from `%edi`/`%rdi` registers, so it takes one argument. If we see the `main` function assembly code, we'll figure out that the value in this register is the address of string we need to enter.
+
+Let's analyze the assembly code for `phase_5`. We see that it checks the length of the string, and if it is not `6`, the bomb will explode. So, the entered string must have the length of `6`.
+
+After this, the execution flow jumps to the <`phase_5` func address + 112> address, zeroes the `%eax` register and jumps to the <`phase_5` func address + 41>. Then the execution flow does something with the
+```assembly
+movzbl (%rbx,%rax), %ecx
+```
+value (it's the address of `%rax`-th symbol in argument string since `%rdi` was moved in `%rbx` in line 3 of `phase_5` funciton assembly code) and at the address of <`phase_5` func address + 66> we see that `%rax` register incremets and then it compares with 6, if not equal jumps to <`phase_5` func address + 41>. It's just the iteration over the argument string characters using the `for` loop!
+
+Let's determine what's going on in the body of this loop.
+```assembly
+movzbl (%rbx,%rax), %ecx
+movb   %cl, (%rsp)
+movq   (%rsp), %rdx
+andl   $0xf, %edx
+movzbl <some sample string address>(%rdx), %edx
+movb   %dl, 0x10(%rsp,%rax)
+```
+Let `%rax` be `i` and `%rbx` be `arg`. We see, that the code extracts the `arg[i]` value, stores it at the top of the stack and in the `%rdx` register, cuts everything after the first nibble via `andl $0xf, %edx` instruction.
+Then, let's have a look at the address of \<some sample string address\>.
+```bash
+(lldb) memory read <some sample string address>
+```
+We see
+```
+<some sample string address>:      6d 61 64 75 69 65 72 73 6e 66 6f 74 76 62 79 6c  maduiersnfotvbyl
+<some sample string address + 10>: 53 6f 20 79 6f 75 20 74 68 69 6e 6b 20 79 6f 75  So you think you
+```
+Looks like a shuffled string of the length of 15, and the `arg` string must decode that shuffled string to give us an answer for the 5-th phase. If wee see the code after the body of `for` loop, we will see, that thats the correct guess.
+```assembly
+movb   $0x0, 0x16(%rsp) ; the string is also stored on the stack, thats the null-terminator
+movl   <some sample string 2 address>, %esi
+leaq   0x10(%rsp), %rdi
+callq  <`strings_not_equal` func address>
+testl  %eax, %eax
+je     <`phase_5` func address + 119> ; go on
+callq  <`explode_bomb` func address>
+```
+It compares that string with some string located at the \<some sample string 2 address\> address. Let's see what's there.
+```bash
+(lldb) memory read <some sample string 2 address>
+```
+And we see
+```
+<some sample string 2 address>:        66 6c 79 65 72 73 00 00 00 00 00 00 00 00 00 00  flyers..........
+<some sample string 2 address + 0x10>: 00 00 7c 0f 40 00 00 00 00 00 b9 0f 40 00 00 00  ..|.@.......@...
+```
+that the correct string is `flyers`. Let's assemble that string using the given symbols at the address of <some sample string address>.
+
+The symbol `'f'` is located at the <some sample string address + 9> address, the symbol `'l'` is located at the <some sample string address + 15> address, the symbol `'y'` is located at the <some sample string address + 14> address,
+the symbol `'e'` is located at the <some sample string address + 5> address, the symbol `'r'` is located at the <some sample string address + 6> address, and the symbol `'s'` is located at the <some sample string address + 7> address.
+
+So, the `arg` string needs to have such values as:
+```
+arg[0] = 9;
+arg[1] = 15;
+arg[2] = 14;
+arg[3] = 5;
+arg[4] = 6;
+arg[5] = 7;
+```
+But if we remember, the `for` loop body use the instruction
+```assembly
+andl   $0xf, %edx
+```
+to zero the all the bits except the least significant nibble. So, the correct answer is:
+```
+arg[0] = 9 + 16 * n;
+arg[1] = 15 + 16 * n;
+arg[2] = 14 + 16 * n;
+arg[3] = 5 + 16 * n;
+arg[4] = 6 + 16 * n;
+arg[5] = 7 + 16 * n;
+```
+where n is a natural number.
+When n=4, if we see the ASCII table, the answer is:
+```
+arg[0] = 'I'
+arg[1] = 'O'
+arg[2] = 'N'
+arg[3] = 'E'
+arg[4] = 'F'
+arg[5] = 'G'
+```
+So, the correct answer is `IONEFG`.
+
+Fun fact: `ionefg` (lower case) is the correct answer too (n=6).
