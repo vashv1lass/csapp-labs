@@ -464,3 +464,163 @@ arg[5] = 'G'
 So, the correct answer is `IONEFG`.
 
 Fun fact: `ionefg` (lower case) is the correct answer too (n=6).
+
+### PHASE 6
+```bash
+(lldb) disassemble
+(lldb) disassemble --address <`phase_6` func address>
+```
+
+The function is very complicated, but we see, that it wants us to enter six numbers. The value of the first number is quite easy to understand.
+```assembly
+subq   $0x50, %rsp
+movq   %rsp, %r13
+movq   %rsp, %rsi
+callq  <`read_six_numbers` func address>
+movq   %rsp, %r14
+movl   $0x0, %r12d
+movq   %r13, %rbp
+movl   (%r13), %eax
+subl   $0x1, %eax
+cmpl   $0x5, %eax
+jbe    <`phase_6` func address + 52>
+callq  <`explode_bomb` func address>
+```
+So, the first value may be in the range of [1; 6]. We see, that it is copied into the `%rax` register and then decremented. Then it compares via unsigned comparison (`jbe` instruction) with `5` and if it is "above", the bomb explodes. The zero value is also tracted as "above" since the decrementaion turns `000..00` into `111...11`.
+
+Then, let's have a look to a next part of the disassembled `phase_6` function.
+```assembly
+<+52>  addl   $0x1, %r12d
+<+56>  cmpl   $0x6, %r12d
+<+60>  je     <`phase_6` func address + 95>
+<+62>  movl   %r12d, %ebx
+<+65>  movslq %ebx, %rax
+<+68>  movl   (%rsp,%rax,4), %eax
+<+71>  cmpl   %eax, (%rbp)
+<+74>  jne    <`phase_6` func address + 81>
+<+76>  callq  <`explode_bomb` func address>
+<+81>  addl   $0x1, %ebx
+<+84>  cmpl   $0x5, %ebx
+<+87>  jle    <`phase_6` func address + 65>
+<+89>  addq   $0x4, %r13
+<+93>  jmp    <`phase_6` func address + 32>
+```
+We see, that it compares every number from 2nd to 6th with the 1st one. The bomb explodes, when at least one of these numbers is equal to 1st.
+
+Let's execute the `phase_6` function instruction-by-instruction.
+
+```bash
+(lldb) disassemble # see the `phase_6` function address
+(lldb) expression $rsp = $rsp - 8
+(lldb) memory write -s 8 $rsp <`phase_6` func address>
+(lldb) thread jump --address <`phase_6` func address>
+(lldb) stepi # use stepi to execute instruction-by-instruction
+```
+We see, that ALL of the numbers are compared in pairs via an embedded loop. If one pair contains equal numbers, the bomb explodes. So, now we see, that ALL of the numbers must be different and ALL of them must be from `1` to `6`.
+
+Let's analyze the second part of this phase.
+```assembly
+<+95>:  leaq   0x18(%rsp), %rsi
+<+100>: movq   %r14, %rax
+<+103>: movl   $0x7, %ecx
+<+108>: movl   %ecx, %edx
+<+110>: subl   (%rax), %edx
+<+112>: movl   %edx, (%rax)
+<+114>: addq   $0x4, %rax
+<+118>: cmpq   %rsi, %rax
+<+121>: jne    <+108>
+```
+You see, that it turns every `x` into `7-x` for every entered variable.
+
+Let's analyze the code part from <+130> to <+183>. The code flow starts at <+163>, `%rsi = 0`
+```assembly
+<+130>: movq   0x8(%rdx), %rdx
+<+134>: addl   $0x1, %eax
+<+137>: cmpl   %ecx, %eax
+<+139>: jne    <+130>
+<+141>: jmp    <+148>
+<+143>: movl   <some address>, %edx
+<+148>: movq   %rdx, 0x20(%rsp,%rsi,2)
+<+153>: addq   $0x4, %rsi
+<+157>: cmpq   $0x18, %rsi
+<+161>: je     <+183>
+<+163>: movl   (%rsp,%rsi), %ecx
+<+166>: cmpl   $0x1, %ecx
+<+169>: jle    <+143>
+<+171>: movl   $0x1, %eax
+<+176>: movl   <some address>, %edx
+<+181>: jmp    <+130>
+```
+If you take a paper and a pen, think a little bit, execute the program instruction-by-instruction, you will figure out that every value has its pointer analogue:
+
+| 7 - entered value | pointer |
+| :--- | :--- |
+| 1 | `<some address>` |
+| 2 | `(<some address> + 0x8)` |
+| 3 | `((<some address> + 0x8) + 0x8)` |
+| 4 | `(((<some address> + 0x8) + 0x8) + 0x8)` |
+| 5 | `((((<some address> + 0x8) + 0x8) + 0x8) + 0x8)` |
+| 6 | `(((((<some address> + 0x8) + 0x8) + 0x8) + 0x8) + 0x8)` |
+
+And this code pushes these pointers in the same order, as the variables (remember that they are currently `7-x`) are located in stack. So, our next task is dereference these pointers. In the following assembly code, `%rbx` is `%rsp+0x20` (the first pointer value), `%rax` is `%rsp+0x28` (the second pointer value) and `%rsi` is `%rsp+50` (the pointer to value that follows 6th), `%rcx` initially is `%rbx`.
+
+```assembly
+<+201>: movq   (%rax), %rdx
+<+204>: movq   %rdx, 0x8(%rcx)
+<+208>: addq   $0x8, %rax
+<+212>: cmpq   %rsi, %rax
+<+215>: je     <+222>
+<+217>: movq   %rdx, %rcx
+<+220>: jmp    <+201>
+```
+This loop just dereferences all of these pointers (makes them like "level 1 pointers" -- dereferencing them will yield its values). Let's see, what values are hiding in these pointers using the `memory read` lldb commands.
+
+| 7 - entered value | pointer | dereferenced pointer (hex, dec)
+| :--- | :--- | :--- |
+| 1 | `<some address>` | 0x14c, 332
+| 2 | `(<some address> + 0x8)` | 0xa8, 168
+| 3 | `((<some address> + 0x8) + 0x8)` | 0x39c, 924
+| 4 | `(((<some address> + 0x8) + 0x8) + 0x8)` | 0x2b3, 691
+| 5 | `((((<some address> + 0x8) + 0x8) + 0x8) + 0x8)` | 0x1dd, 477
+| 6 | `(((((<some address> + 0x8) + 0x8) + 0x8) + 0x8) + 0x8)` | 0x1bb, 443
+
+It also just occurred to me that it was a structure with the first field being the entered value, the second field being the dereferenced pointer, and the third field being a pointer itself. Let's go to the next part of the code. I guess our task now is to determine how these values must be ordered. In the following assembly code, `%rdx` is the "level 1" pointer that corresponds the last entered value.
+
+```assembly
+<+222>: movq   $0x0, 0x8(%rdx)
+<+230>: movl   $0x5, %ebp
+<+235>: movq   0x8(%rbx), %rax
+<+239>: movl   (%rax), %eax
+<+241>: cmpl   %eax, (%rbx)
+<+243>: jge    <+250>
+<+245>: callq  <`explode_bomb` func address>
+<+250>: movq   0x8(%rbx), %rbx
+<+254>: subl   $0x1, %ebp
+<+257>: jne    <+235>
+```
+
+You see, that the loop begins with the first entered value (the corresponding pointer) and goes on to the last. Also we see that the current value is compared with the next one, and it must be greater or equal or the bomb explodes. So, the values must be sorted in non-increasing order. Let's sort the table.
+
+| 7 - entered value | pointer | dereferenced pointer (hex, dec)
+| :--- | :--- | :--- |
+| 3 | `((<some address> + 0x8) + 0x8)` | 0x39c, 924
+| 4 | `(((<some address> + 0x8) + 0x8) + 0x8)` | 0x2b3, 691
+| 5 | `((((<some address> + 0x8) + 0x8) + 0x8) + 0x8)` | 0x1dd, 477
+| 6 | `(((((<some address> + 0x8) + 0x8) + 0x8) + 0x8) + 0x8)` | 0x1bb, 443
+| 1 | `<some address>` | 0x14c, 332
+| 2 | `(<some address> + 0x8)` | 0xa8, 168
+
+Or
+| entered value | pointer | dereferenced pointer (hex, dec)
+| :--- | :--- | :--- |
+| 4 | `((<some address> + 0x8) + 0x8)` | 0x39c, 924
+| 3 | `(((<some address> + 0x8) + 0x8) + 0x8)` | 0x2b3, 691
+| 2 | `((((<some address> + 0x8) + 0x8) + 0x8) + 0x8)` | 0x1dd, 477
+| 1 | `(((((<some address> + 0x8) + 0x8) + 0x8) + 0x8) + 0x8)` | 0x1bb, 443
+| 6 | `<some address>` | 0x14c, 332
+| 5 | `(<some address> + 0x8)` | 0xa8, 168
+
+So, the correct answer for phase 6 is
+```
+4 3 2 1 6 5
+```
