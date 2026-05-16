@@ -624,3 +624,243 @@ So, the correct answer for phase 6 is
 ```
 4 3 2 1 6 5
 ```
+
+### THE SECRET PHASE
+
+Go to phase 1 and try to read memory after the `Border relations...` string.
+
+```bash
+(lldb) memory read <phase 1 sample string address>
+(lldb) memory read <phase 1 sample string address + 0x20>
+(lldb) memory read <phase 1 sample string address + 0x40>
+```
+
+You'll get
+```
+<phase 1 sample string address>:        42 6f 72 64 65 72 20 72 65 6c 61 74 69 6f 6e 73  Border relations
+<phase 1 sample string address + 0x10>: 20 77 69 74 68 20 43 61 6e 61 64 61 20 68 61 76   with Canada hav
+<phase 1 sample string address + 0x20>: 65 20 6e 65 76 65 72 20 62 65 65 6e 20 62 65 74  e never been bet
+<phase 1 sample string address + 0x30>: 74 65 72 2e 00 00 00 00 57 6f 77 21 20 59 6f 75  ter.....Wow! You
+<phase 1 sample string address + 0x40>: 27 76 65 20 64 65 66 75 73 65 64 20 74 68 65 20  've defused the 
+<phase 1 sample string address + 0x50>: 73 65 63 72 65 74 20 73 74 61 67 65 21 00 66 6c  secret stage!.fl
+```
+
+There is a message about some "secret" stage. Let's analyze the assembly code of `main` function.
+
+```bash
+(lldb) disassemble
+```
+
+There's a function `read_line`. It is a very nice candidate for the "secret stage" because it reads the line from standard input. Let's analyze this function.
+
+```bash
+(lldb) disassemble --address <`read_line` function address>
+```
+
+There are some instructions that call the C `puts` function. Let's see what do they print.
+
+```assembly
+<`read_line` func address> <+35>:  movl   <some address 1>, %edi
+<`read_line` func address> <+40>:  callq  <`puts` func address>
+```
+```bash
+(lldb) memory read <some address 1>
+```
+```
+<some address 1>:      45 72 72 6f 72 3a 20 50 72 65 6d 61 74 75 72 65  Error: Premature
+<some address 1 + 10>: 20 45 4f 46 20 6f 6e 20 73 74 64 69 6e 00 47 52   EOF on stdin.GR
+```
+Nah, thats not it. Let's try the second `puts` call.
+
+```assembly
+<`read_line` func address> <+109>:  movl   <some address 1>, %edi
+<`read_line` func address> <+114>:  callq  <`puts` func address>
+```
+
+That's the same address. And the last one.
+```assembly
+<`read_line` func address> <+182>:  movl   <some address 2>, %edi
+<`read_line` func address> <+187>:  callq  <`puts` func address>
+```
+```bash
+(lldb) memory read <some address 2>
+```
+```
+<some address 2>:        45 72 72 6f 72 3a 20 49 6e 70 75 74 20 6c 69 6e  Error: Input lin
+<some address 2 + 0x10>: 65 20 74 6f 6f 20 6c 6f 6e 67 00 25 64 20 25 64  e too long.%d %d
+```
+Aw, that was a mistake. But we also have a `phase_defused` function. Let's disassemble it.
+```bash
+(lldb) disassemble --address <`phase_defused` func address>
+```
+And bingo! We see the `secret_phase` function call. Let's determine, how the flow gets into this function by executing `phase_defused` instruction-by-instruction. We see, that it goes there when this condition is true:
+```assembly
+<+20>:  cmpl   $0x6, 0x202181(%rip)
+```
+
+This condition is true, when the 6th stage was defused. Then it calls `sscanf` function, where the first argument is the string we entered in phase 4 (found out by trial and error), checks if we entered 3 input units at this phase (two numbers and a string) and if it is true, the flow goes on:
+```assembly
+movl   <fmt string address>, %esi ; equals "%d %d %s"
+movl   <phase 4 input string address>, %edi
+callq  <__isoc99_sscanf>
+cmpl   $0x3, %eax
+jne    <+113> ; message about the defused bomb
+```
+
+Then the entered string is compared with the string at some address and goes on if that string is equal to entered.
+```assembly
+movl   <that string address>, %esi
+leaq   0x10(%rsp), %rdi ; 0x10(%rsp) - entered string
+callq  <`strings_not_equal` func address>
+testl  %eax, %eax
+jne    <+113>
+```
+
+Let's see what string is at that address.
+```bash
+(lldb) memory read <that string address>
+```
+```
+<that string address>:        44 72 45 76 69 6c 00 67 72 65 61 74 77 68 69 74  DrEvil.greatwhit
+<that string address + 0x10>: 65 2e 69 63 73 2e 63 73 2e 63 6d 75 2e 65 64 75  e.ics.cs.cmu.edu
+```
+So, the string is `DrEvil` and to find the secret phase you need to enter in phase 4 one of these strings:
+```
+0 0 DrEvil
+1 0 DrEvil
+3 0 DrEvil
+7 0 DrEvil
+```
+
+Now we know how to activate the secret phase. Let's disassemble it.
+```bash
+(lldb) disassemble --address <`secret_phase` func address>
+```
+
+```assembly
+<+0>:  pushq  %rbx
+<+1>:  callq  <`read_line` func address>
+<+6>:  movl   $0xa, %edx
+<+11>: movl   $0x0, %esi
+<+16>: movq   %rax, %rdi
+<+19>: callq  <`strtol` func address>
+<+24>: movq   %rax, %rbx
+<+27>: leal   -0x1(%rax), %eax
+<+30>: cmpl   $0x3e8, %eax
+<+35>: jbe    <+42>
+<+37>: callq  <`explode_bomb` func address>
+```
+
+In this part of code, we see, that in this phase, we need to input one number. This number will be stored in `%rbx`, In `%rax` will be stored `%rbx-1`. Then, if entered number minus 1 is not in the range of [0; 1000] (because of unsigned `jbe` instruction), so the entered number must be in range [1; 1001] or the bomb explodes. Let's analyze the next part of the disassembled code.
+
+```assembly
+<+42>: movl   %ebx, %esi
+<+44>: movl   <some address>, %edi
+<+49>: callq  <`fun7` func address>
+<+54>: cmpl   $0x2, %eax
+<+57>: je     <+64>
+<+59>: callq  <`explode_bomb` func address>
+```
+
+There, we see, that the `secret_phase` function calls some `fun7` function, and if the value returned from it not `2`, then the bomb explodes. There are two arguments passed in `fun7` function: `some_address` and the entered number. So, let's disassemble the `fun7` function.
+
+```bash
+(lldb) disassemble --address <`fun7` func address>
+```
+
+We see, that `fun7` is pretty similar to `fun4` (see PHASE 4). So, let's reverse-engineer it like in phase 4.
+
+```c
+// straightforward assembly code translation into C.
+int fun7(void *ptr, int y) {
+    if (!ptr) {
+        return 0xFFFFFFFF;
+    }
+    
+    int x = *(int *)ptr;
+    if (x <= y) {
+        if (x == y) {
+            return 0;
+        }
+        return 2 * fun7(ptr + 16, y) + 1;
+    }
+
+    return 2 * fun7(ptr + 8, y);
+}
+```
+
+Let's see, what is going on at ptr.
+```bash
+(lldb) memory read -s 8 -f x <ptr>
+```
+We will get something like:
+```
+<ptr>:        0x0000000000000024 <ptr + 0x20>
+<ptr + 0x10>: <ptr + 0x40>       0x0000000000000000
+<ptr + 0x20>: 0x0000000000000008 <ptr + 0xa0>
+<ptr + 0x30>: <ptr + 0x60>       0x0000000000000000
+```
+
+So, at the first call, the value of `x` is 0x24 (36). Let's read some more values at this memory section.
+
+```bash
+(lldb) memory read -s 8 -f x -c 58 <ptr> # the value if 58 is also found by trial and error.
+```
+```
+<ptr>:         0x0000000000000024 <ptr + 0x20>
+<ptr + 0x10>:  <ptr + 0x40>       0x0000000000000000
+<ptr + 0x20>:  0x0000000000000008 <ptr + 0xa0>
+<ptr + 0x30>:  <ptr + 0x60>       0x0000000000000000
+<ptr + 0x40>:  0x0000000000000032 <ptr + 0x80>
+<ptr + 0x50>:  <ptr + 0xc0>       0x0000000000000000
+<ptr + 0x60>:  0x0000000000000016 <ptr + 0x180>
+<ptr + 0x70>:  <ptr + 0x140>      0x0000000000000000
+<ptr + 0x80>:  0x000000000000002d <ptr + 0xe0>
+<ptr + 0x90>:  <ptr + 0x1a0>      0x0000000000000000
+<ptr + 0xa0>:  0x0000000000000006 <ptr + 0x100>
+<ptr + 0xb0>:  <ptr + 0x160>      0x0000000000000000
+<ptr + 0xc0>:  0x000000000000006b <ptr + 0x120>
+<ptr + 0xd0>:  <ptr + 0x1c0>      0x0000000000000000
+<ptr + 0xe0>:  0x0000000000000028 0x0000000000000000
+<ptr + 0xf0>:  0x0000000000000000 0x0000000000000000
+<ptr + 0x100>: 0x0000000000000001 0x0000000000000000
+<ptr + 0x110>: 0x0000000000000000 0x0000000000000000
+<ptr + 0x120>: 0x0000000000000063 0x0000000000000000
+<ptr + 0x130>: 0x0000000000000000 0x0000000000000000
+<ptr + 0x140>: 0x0000000000000023 0x0000000000000000
+<ptr + 0x150>: 0x0000000000000000 0x0000000000000000
+<ptr + 0x160>: 0x0000000000000007 0x0000000000000000
+<ptr + 0x170>: 0x0000000000000000 0x0000000000000000
+<ptr + 0x180>: 0x0000000000000014 0x0000000000000000
+<ptr + 0x190>: 0x0000000000000000 0x0000000000000000
+<ptr + 0x1a0>: 0x000000000000002f 0x0000000000000000
+<ptr + 0x1b0>: 0x0000000000000000 0x0000000000000000
+<ptr + 0x1c0>: 0x00000000000003e9 0x0000000000000000
+```
+
+Let's write a unique dereferenced values in this dump. Other values are not correct because the stack overflows/function returns 0xFFFFFFFF (recursion exit condition is `y == x`).
+
+```
+0x0000000000000000 // 0
+0x0000000000000001 // 1
+0x0000000000000006 // 6
+0x0000000000000007 // 7
+0x0000000000000008 // 8
+0x0000000000000014 // 20
+0x0000000000000016 // 22
+0x0000000000000023 // 35
+0x0000000000000024 // 36
+0x0000000000000028 // 40
+0x000000000000002d // 45
+0x000000000000002f // 47
+0x0000000000000032 // 50
+0x0000000000000063 // 99
+0x000000000000006b // 107
+0x00000000000003e9 // 1001
+```
+
+And let's just manually brute force them (cuz i have 2 small brain for brute forcing it programmatically lmao + i think that i've translated `fun7` incorrectly + manually is just faster + i'm just so fckn tired). So, the correct answers for the secret stage, are:
+```
+(1) 20
+(2) 22
+```
