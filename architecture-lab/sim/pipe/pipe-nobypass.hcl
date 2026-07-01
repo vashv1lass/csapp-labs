@@ -309,7 +309,7 @@ word Stat = [
 bool F_bubble = 0;
 bool F_stall =
 	# Modify the following to stall the update of pipeline register F
-	0 ||
+	((d_srcA != RNONE && (E_dstE == d_srcA || E_dstM == d_srcA || M_dstE == d_srcA || M_dstM == d_srcA || W_dstE == d_srcA || W_dstM == d_srcA)) || (d_srcB != RNONE && (E_dstE == d_srcB || E_dstM == d_srcB || M_dstE == d_srcB || M_dstM == d_srcB || W_dstE == d_srcB || W_dstM == d_srcB))) ||
 	# Stalling at fetch while ret passes through pipeline
 	IRET in { D_icode, E_icode, M_icode };
 
@@ -317,7 +317,7 @@ bool F_stall =
 # At most one of these can be true.
 bool D_stall = 
 	# Modify the following to stall the instruction in decode
-	0;
+	((d_srcA != RNONE && (E_dstE == d_srcA || E_dstM == d_srcA || M_dstE == d_srcA || M_dstM == d_srcA || W_dstE == d_srcA || W_dstM == d_srcA)) || (d_srcB != RNONE && (E_dstE == d_srcB || E_dstM == d_srcB || M_dstE == d_srcB || M_dstM == d_srcB || W_dstE == d_srcB || W_dstM == d_srcB))) && !(E_icode == IJXX && !e_Cnd);
 
 bool D_bubble =
 	# Mispredicted branch
@@ -325,7 +325,7 @@ bool D_bubble =
 	# Stalling at fetch while ret passes through pipeline
 	!(E_icode in { IMRMOVQ, IPOPQ } && E_dstM in { d_srcA, d_srcB }) &&
 	# but not condition for a generate/use hazard
-	!0 &&
+	!((d_srcA != RNONE && (E_dstE == d_srcA || E_dstM == d_srcA || M_dstE == d_srcA || M_dstM == d_srcA || W_dstE == d_srcA || W_dstM == d_srcA)) || (d_srcB != RNONE && (E_dstE == d_srcB || E_dstM == d_srcB || M_dstE == d_srcB || M_dstM == d_srcB || W_dstE == d_srcB || W_dstM == d_srcB))) &&
 	  IRET in { D_icode, E_icode, M_icode };
 
 # Should I stall or inject a bubble into Pipeline Register E?
@@ -335,7 +335,7 @@ bool E_bubble =
 	# Mispredicted branch
 	(E_icode == IJXX && !e_Cnd) ||
 	# Modify the following to inject bubble into the execute stage
-	0;
+	((d_srcA != RNONE && (E_dstE == d_srcA || E_dstM == d_srcA || M_dstE == d_srcA || M_dstM == d_srcA || W_dstE == d_srcA || W_dstM == d_srcA)) || (d_srcB != RNONE && (E_dstE == d_srcB || E_dstM == d_srcB || M_dstE == d_srcB || M_dstM == d_srcB || W_dstE == d_srcB || W_dstM == d_srcB)));
 
 # Should I stall or inject a bubble into Pipeline Register M?
 # At most one of these can be true.
