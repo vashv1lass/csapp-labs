@@ -1,0 +1,42 @@
+        irmovq stack, %rsp
+
+        irmovq ele1, %rdi
+        call sum_list
+        
+        halt
+
+sum_list:
+        irmovq $0, %rax
+        
+        irmovq $0, %r8
+sum_list_condcheck:
+        mrmovq 8(%rdi), %rcx
+        subq %r8, %rcx
+        je sum_last
+
+        mrmovq 0(%rdi), %rdx
+        addq %rdx, %rax
+        mrmovq 8(%rdi), %rdi
+        
+        jmp sum_list_condcheck
+sum_last:
+        mrmovq 0(%rdi), %rdx
+        addq %rdx, %rax
+        mrmovq 8(%rdi), %rdi
+
+        ret
+
+.align 8
+ele1:
+        .quad 0x00a
+        .quad ele2
+ele2:
+        .quad 0x0b0
+        .quad ele3
+ele3:
+        .quad 0xc00
+        .quad 0
+
+.pos 0x400
+stack:
+
