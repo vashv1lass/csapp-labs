@@ -1,0 +1,48 @@
+        irmovq stack, %rsp
+
+        irmovq src, %rdi
+        irmovq dest, %rsi
+        irmovq $3, %rdx
+        call copy_block
+
+        halt
+
+copy_block:
+        pushq %rbx
+
+        irmovq $0, %rax
+        
+        irmovq $0, %r8
+        irmovq $8, %r9
+        irmovq $1, %rbx
+
+copy_block_cycle:
+        subq %r8, %rdx
+        jle copy_block_cycle_done
+        
+        mrmovq 0(%rdi), %rcx
+        addq %r9, %rdi
+        rmmovq %rcx, 0(%rsi)
+        addq %r9, %rsi
+
+        xorq %rcx, %rax
+        subq %rbx, %rdx
+        jmp copy_block_cycle
+
+copy_block_cycle_done:
+        popq %rbx
+        ret
+
+.pos 0x90
+src:
+        .quad 0x00a
+        .quad 0x0b0
+        .quad 0xc00
+
+dest:
+        .quad 0x111
+        .quad 0x222
+        .quad 0x333
+
+.pos 0x400
+stack:
