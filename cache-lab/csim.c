@@ -244,6 +244,8 @@ report_t simulate_cache(cache_t * cache, char tracefile[64], bool verbose) {
 		}
 	}
 
+	fclose(tracefile_d);
+
 	return report;
 }
 
