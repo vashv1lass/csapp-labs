@@ -20,6 +20,11 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
  *     searches for that string to identify the transpose function to
  *     be graded. 
  */
+
+int min(int x, int y) {
+	return x < y ? x : y;
+}
+
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
@@ -31,10 +36,11 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 	int tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7;
 
 	if (M == 32 && N == 32) {
+		// did it randomly
 		for (bi = 0; bi < N; bi += 8) {
 			for (bj = 0; bj < M; bj += 8) {
-				j = bj;
 				for (i = bi; i - bi < 8; i++) {
+					int j = bj;
 					tmp0 = A[i][j];
 					tmp1 = A[i][j + 1];
 					tmp2 = A[i][j + 2];
@@ -56,8 +62,83 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 			}
 		}
 	} else if (M == 64 && N == 64) {
+		// i couldn't figure ts out by myself, it is very complicated for me to get there
+		// solved by LLM, implemented by me
+		for (bi = 0; bi < N; bi += 8) {
+			for (bj = 0; bj < M; bj += 8) {
+				for (i = bi; i - bi < 4; i++) {
+					j = bj;
+
+					tmp0 = A[i][j];
+					tmp1 = A[i][j + 1];
+					tmp2 = A[i][j + 2];
+					tmp3 = A[i][j + 3];
+					tmp4 = A[i][j + 4];
+					tmp5 = A[i][j + 5];
+					tmp6 = A[i][j + 6];
+					tmp7 = A[i][j + 7];
+
+					B[j][i] = tmp0;
+					B[j + 1][i] = tmp1;
+					B[j + 2][i] = tmp2;
+					B[j + 3][i] = tmp3;
+
+					B[j][i + 4] = tmp4;
+					B[j + 1][i + 4] = tmp5;
+					B[j + 2][i + 4] = tmp6;
+					B[j + 3][i + 4] = tmp7;
+				}
+
+				for (j = bj; j - bj < 4; j++) {
+					i = bi;
+
+					tmp0 = B[j][i + 4];
+					tmp1 = B[j][i + 5];
+					tmp2 = B[j][i + 6];
+					tmp3 = B[j][i + 7];
+
+					tmp4 = A[i + 4][j];
+					tmp5 = A[i + 5][j];
+					tmp6 = A[i + 6][j];
+					tmp7 = A[i + 7][j];
+
+					B[j][i + 4] = tmp4;
+					B[j][i + 5] = tmp5;
+					B[j][i + 6] = tmp6;
+					B[j][i + 7] = tmp7;
+					
+					B[j + 4][i] = tmp0;
+					B[j + 4][i + 1] = tmp1;
+					B[j + 4][i + 2] = tmp2;
+					B[j + 4][i + 3] = tmp3;
+				}
+
+				for (i = bi + 4; i - bi < 8; i++) {
+					j = bj;
+
+					tmp0 = A[i][j + 4];
+					tmp1 = A[i][j + 5];
+					tmp2 = A[i][j + 6];
+					tmp3 = A[i][j + 7];
+					
+					B[j + 4][i] = tmp0;
+					B[j + 5][i] = tmp1;
+					B[j + 6][i] = tmp2;
+					B[j + 7][i] = tmp3;
+				}
+			}
+		}
 	} else {
-		// later later
+		// guessed it
+		for (bi = 0; bi < N; bi += 17) {
+			for (bj = 0; bj < M; bj += 17) {
+				for (i = bi; i - bi < 17 && i < N; i++) {
+					for (j = bj; j - bj < 17 && j < M; j++) {
+						B[j][i] = A[i][j];
+					}
+				}
+			}
+		}
 	}
 }
 
